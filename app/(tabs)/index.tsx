@@ -1,75 +1,141 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import React, { useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  Button,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Image,
+} from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import { Audio } from 'expo-av';
 
 export default function HomeScreen() {
+  const [tracks, setTracks] = useState<any[]>([]);
+  const [playingTrack, setPlayingTrack] = useState<any | null>(null);
+  const soundRef = useRef(new Audio.Sound());
+
+  const pickTrack = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*' });
+    if (result.canceled) return;
+    const file = result.assets[0];
+
+    setTracks((prev) => [...prev, file]);
+    if (soundRef.current) await soundRef.current.unloadAsync();
+
+    const { sound } = await Audio.Sound.createAsync({ uri: file.uri });
+    soundRef.current = sound;
+    await sound.playAsync();
+    setPlayingTrack(file);
+  };
+
+  const togglePlayback = async () => {
+    const status = await soundRef.current.getStatusAsync();
+    if ('isPlaying' in status) {
+      if (status.isPlaying) {
+        await soundRef.current.pauseAsync();
+      } else {
+        await soundRef.current.playAsync();
+      }
+    }
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
+    <View style={styles.container}>
+      <Text style={styles.title}>🎵 Offtrack</Text>
+
+      {/* Vinyl UI */}
+      <View style={styles.vinylContainer}>
         <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+          source={{
+            uri: 'https://upload.wikimedia.org/wikipedia/commons/2/26/Blank_album_cover_white.png',
+          }}
+          style={styles.coverImage}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        <View style={styles.record} />
+      </View>
+
+      <Text style={styles.trackText}>
+        {playingTrack ? playingTrack.name : 'No track playing'}
+      </Text>
+
+      {/* Controls */}
+      <View style={styles.controls}>
+        <Button title="📂 Load Track" onPress={pickTrack} />
+        <Button title="⏯ Play/Pause" onPress={togglePlayback} />
+      </View>
+
+      {/* Track List */}
+      <FlatList
+        data={tracks}
+        keyExtractor={(item) => item.uri}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            onPress={async () => {
+              if (soundRef.current) await soundRef.current.unloadAsync();
+              const { sound } = await Audio.Sound.createAsync({ uri: item.uri });
+              soundRef.current = sound;
+              await sound.playAsync();
+              setPlayingTrack(item);
+            }}
+          >
+            <Text style={styles.trackItem}>{item.name}</Text>
+          </TouchableOpacity>
+        )}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    paddingTop: 40,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    flex: 1,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  vinylContainer: {
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    marginVertical: 20,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
+  record: {
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: '#000',
     position: 'absolute',
+    zIndex: 1,
+  },
+  coverImage: {
+    width: 180,
+    height: 180,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    zIndex: 2,
+  },
+  trackText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginVertical: 8,
+    color: '#333',
+  },
+  controls: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 16,
+  },
+  trackItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
   },
 });
